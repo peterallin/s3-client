@@ -85,7 +85,6 @@ fn make_auth(
         &signed_headers,
         &payload_hash,
     );
-    println!("{}", canonical_request);
     let to_sign = make_string_to_sign(&date, region, &hash(canonical_request.as_bytes()));
     let signing_key = signing_key(secret_key, &date.format("%Y%m%d").to_string(), region);
     let signature = to_hex_string(&hmac_sha256::HMAC::mac(to_sign.as_bytes(), &signing_key));
