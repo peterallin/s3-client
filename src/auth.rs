@@ -14,58 +14,98 @@ impl Auth {
         url: &Url,
         extra_headers: &[(String, String)],
     ) -> Result<Self> {
-        let region = "us-east-1";
-        let payload_hash = hash("".as_bytes());
-        let host = url
-            .host_str()
-            .ok_or_else(|| anyhow!("No host in the URL"))?;
-        let host_port = if let Some(port) = url.port() {
-            format!("{}:{}", host, port)
-        } else {
-            host.to_string()
-        };
-        let date_zulu = date.format("%Y%m%dT%H%M%SZ").to_string();
-        let mut headers: Vec<(String, String)> = vec![
-            ("Host".into(), host_port),
-            ("X-Amz-Content-sha256".into(), payload_hash.clone()),
-            ("X-Amz-Date".into(), date_zulu),
-        ];
-        headers.extend_from_slice(extra_headers);
-        let canonical_headers = make_canonical_headers(&headers);
-        let signed_headers = make_signed_headers(&headers);
-        let canonical_request = make_canonical_request(
+        make_auth(
             "GET",
-            url.path(),
-            "",
-            &canonical_headers,
-            &signed_headers,
-            &payload_hash,
-        );
-        let to_sign = make_string_to_sign(&date, region, &hash(canonical_request.as_bytes()));
-        let signing_key = signing_key(secret_key, &date.format("%Y%m%d").to_string(), region);
-        let signature = to_hex_string(&hmac_sha256::HMAC::mac(to_sign.as_bytes(), &signing_key));
-        let credential = format!(
-            "{}/{}/{}/s3/aws4_request",
             access_key,
-            date.format("%Y%m%d"),
-            region
-        );
-        let authorization = format!(
-            "AWS4-HMAC-SHA256 Credential={}, SignedHeaders={}, Signature={}",
-            credential, signed_headers, signature
-        );
-        let authorization = ("Authorization".into(), authorization);
+            secret_key,
+            &date,
+            url,
+            extra_headers,
+            &[],
+        )
+    }
 
-        let headers: Vec<(String, String)> = headers
-            .into_iter()
-            .chain(std::iter::once(authorization))
-            .collect();
-        Ok(Auth { headers })
+    pub fn new_put(
+        access_key: &str,
+        secret_key: &str,
+        date: DateTime<Utc>,
+        url: &Url,
+        extra_headers: &[(String, String)],
+        payload: &[u8],
+    ) -> Result<Self> {
+        make_auth(
+            "PUT",
+            access_key,
+            secret_key,
+            &date,
+            url,
+            extra_headers,
+            payload,
+        )
     }
 
     pub fn headers(&self) -> &[(String, String)] {
         &self.headers
     }
+}
+
+fn make_auth(
+    http_method: &str,
+    access_key: &str,
+    secret_key: &str,
+    date: &DateTime<Utc>,
+    url: &Url,
+    extra_headers: &[(String, String)],
+    payload: &[u8],
+) -> Result<Auth> {
+    let region = "us-east-1";
+    let payload_hash = hash(payload);
+    let host = url
+        .host_str()
+        .ok_or_else(|| anyhow!("No host in the URL"))?;
+    let host_port = if let Some(port) = url.port() {
+        format!("{}:{}", host, port)
+    } else {
+        host.to_string()
+    };
+    let date_zulu = date.format("%Y%m%dT%H%M%SZ").to_string();
+    let mut headers: Vec<(String, String)> = vec![
+        ("Host".into(), host_port),
+        ("X-Amz-Content-sha256".into(), payload_hash.clone()),
+        ("X-Amz-Date".into(), date_zulu),
+    ];
+    headers.extend_from_slice(extra_headers);
+    let canonical_headers = make_canonical_headers(&headers);
+    let signed_headers = make_signed_headers(&headers);
+    let canonical_request = make_canonical_request(
+        http_method,
+        url.path(),
+        "",
+        &canonical_headers,
+        &signed_headers,
+        &payload_hash,
+    );
+    println!("{}", canonical_request);
+    let to_sign = make_string_to_sign(&date, region, &hash(canonical_request.as_bytes()));
+    let signing_key = signing_key(secret_key, &date.format("%Y%m%d").to_string(), region);
+    let signature = to_hex_string(&hmac_sha256::HMAC::mac(to_sign.as_bytes(), &signing_key));
+    let credential = format!(
+        "{}/{}/{}/s3/aws4_request",
+        access_key,
+        date.format("%Y%m%d"),
+        region
+    );
+    let authorization = format!(
+        "AWS4-HMAC-SHA256 Credential={}, SignedHeaders={}, Signature={}",
+        credential, signed_headers, signature
+    );
+    let authorization = ("Authorization".into(), authorization);
+
+    let headers: Vec<(String, String)> = headers
+        .into_iter()
+        .chain(std::iter::once(authorization))
+        .collect();
+    Ok(Auth { headers })
 }
 
 fn hash(data: &[u8]) -> String {
