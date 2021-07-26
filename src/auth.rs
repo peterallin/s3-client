@@ -12,6 +12,7 @@ impl Auth {
         secret_key: &str,
         date: DateTime<Utc>,
         url: &Url,
+        extra_headers: &[(String, String)],
     ) -> Result<Self> {
         let region = "us-east-1";
         let payload_hash = hash("".as_bytes());
@@ -24,11 +25,12 @@ impl Auth {
             host.to_string()
         };
         let date_zulu = date.format("%Y%m%dT%H%M%SZ").to_string();
-        let headers: Vec<(String, String)> = vec![
+        let mut headers: Vec<(String, String)> = vec![
             ("Host".into(), host_port),
             ("X-Amz-Content-sha256".into(), payload_hash.clone()),
             ("X-Amz-Date".into(), date_zulu),
         ];
+        headers.extend_from_slice(extra_headers);
         let canonical_headers = make_canonical_headers(&headers);
         let signed_headers = make_signed_headers(&headers);
         let canonical_request = make_canonical_request(
