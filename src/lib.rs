@@ -6,6 +6,7 @@ pub use auth::Auth;
 mod tests {
     use crate::Auth;
     use chrono::{DateTime, Utc};
+    use reqwest::header::{HeaderMap, HeaderValue};
     use url::Url;
 
     #[test]
@@ -20,9 +21,36 @@ mod tests {
             &[("Range".into(), "bytes=0-9".into())],
         )
         .unwrap();
-        let authorization = get_auth_header(&auth);
+        let auth_header_val = get_auth_header(&auth);
+        assert_eq!("AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request, SignedHeaders=host;range;x-amz-content-sha256;x-amz-date, Signature=f0e8bdb87c964420e857bd35b5d6ed310bd44f0170aba48dd91039c6036bdb41", auth_header_val);
 
-        assert_eq!("AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request, SignedHeaders=host;range;x-amz-content-sha256;x-amz-date, Signature=f0e8bdb87c964420e857bd35b5d6ed310bd44f0170aba48dd91039c6036bdb41", authorization);
+        let header_map: HeaderMap = auth.into();
+        assert_eq!(header_map.len(), 5);
+        assert_eq!(
+            header_map.get("Host"),
+            Some(&HeaderValue::from_str("examplebucket.s3.amazonaws.com").unwrap())
+        );
+        assert_eq!(
+            header_map.get("x-amz-content-sha256"),
+            Some(
+                &HeaderValue::from_str(
+                    "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                )
+                .unwrap()
+            )
+        );
+        assert_eq!(
+            header_map.get("x-amz-date"),
+            Some(&HeaderValue::from_str("20130524T000000Z").unwrap())
+        );
+        assert_eq!(
+            header_map.get("range"),
+            Some(&HeaderValue::from_str("bytes=0-9").unwrap())
+        );
+        assert_eq!(
+            header_map.get("authorization"),
+            Some(&HeaderValue::from_str("AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request, SignedHeaders=host;range;x-amz-content-sha256;x-amz-date, Signature=f0e8bdb87c964420e857bd35b5d6ed310bd44f0170aba48dd91039c6036bdb41").unwrap())
+        );
     }
 
     #[test]
